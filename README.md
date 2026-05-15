@@ -35,18 +35,18 @@
 </p>
 <p align="center" style="color:grey;"><i>Get started with Kestra in 3 minutes.</i></p>
 
-# Kestra Plugin Template
+# Kestra Xquik Plugin
 
 ## Why
 
-- What user problem does this solve? Teams need a concrete starting point for building and validating new Kestra plugins without recreating the same project scaffolding from scratch.
-- Why would a team adopt this plugin in a workflow? It gives plugin authors a ready-made reference repo they can adapt alongside their own build, test, and publishing workflow.
-- What operational/business outcome does it enable? It shortens plugin delivery time, reduces setup mistakes, and makes internal or partner plugin development more repeatable.
+- What user problem does this solve? Teams need a reliable, scheduled way to collect public X/Twitter data (tweets, users, timelines, trends) without building custom API integrations from scratch.
+- Why would a team adopt this plugin in a workflow? It provides ready-made tasks for the Xquik X/Twitter API, enabling direct integration with downstream notifications, data warehouse updates, or trend-monitoring workflows.
+- What operational/business outcome does it enable? It reduces integration effort, centralises credential management, and makes X/Twitter data collection repeatable and observable within Kestra.
 
 ## What
 
-- Provides plugin components under `io.kestra.plugin.templates`.
-- Includes classes such as `Example`, `Trigger`.
+- Provides plugin components under `io.kestra.plugin.xquik`.
+- Covers read-only Xquik API endpoints: tweet search, user lookup, user timeline, and trend data.
 
 ## Documentation
 * Full documentation can be found under: [kestra.io/docs](https://kestra.io/docs)

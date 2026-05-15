@@ -1,15 +1,15 @@
-# Kestra Template Plugin
+# Kestra Xquik Plugin
 
 ## What
 
-- Provides plugin components under `io.kestra.plugin.templates`.
-- Includes classes such as `Example`, `Trigger`.
+- Provides plugin components under `io.kestra.plugin.xquik`.
+- Covers read-only Xquik API endpoints: tweet search, user lookup, user timeline, and trend data.
 
 ## Why
 
-- What user problem does this solve? Teams need a concrete starting point for building and validating new Kestra plugins without recreating the same project scaffolding from scratch.
-- Why would a team adopt this plugin in a workflow? It gives plugin authors a ready-made reference repo they can adapt alongside their own build, test, and publishing workflow.
-- What operational/business outcome does it enable? It shortens plugin delivery time, reduces setup mistakes, and makes internal or partner plugin development more repeatable.
+- What user problem does this solve? Teams need a reliable, scheduled way to collect public X/Twitter data without building custom API integrations from scratch.
+- Why would a team adopt this plugin in a workflow? It provides ready-made tasks for the Xquik X/Twitter API, enabling direct integration with downstream notifications, data warehouse updates, or trend-monitoring workflows.
+- What operational/business outcome does it enable? It reduces integration effort, centralises credential management, and makes X/Twitter data collection repeatable and observable within Kestra.
 
 ## How
 
@@ -17,7 +17,7 @@
 
 Single-module plugin. Source packages under `io.kestra.plugin`:
 
-- `templates`
+- `xquik`
 
 Infrastructure dependencies (Docker Compose services):
 
@@ -25,14 +25,14 @@ Infrastructure dependencies (Docker Compose services):
 
 ### Key Plugin Classes
 
-- `io.kestra.plugin.templates.Example`
+- `io.kestra.plugin.xquik` (package — classes to be added per endpoint)
 
 ### Project Structure
 
 ```
-plugin-template/
-├── src/main/java/io/kestra/plugin/templates/
-├── src/test/java/io/kestra/plugin/templates/
+plugin-xquik/
+├── src/main/java/io/kestra/plugin/xquik/
+├── src/test/java/io/kestra/plugin/xquik/
 ├── build.gradle
 └── README.md
 ```
