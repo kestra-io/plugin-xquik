@@ -1,7 +1,7 @@
 @PluginSubGroup(
     title = "Xquik",
-    description = "Plugin to interact with the Xquik X/Twitter API for public data retrieval.",
-    categories = PluginSubGroup.PluginCategory.TOOL
+    description = "This sub-group contains tasks for retrieving public X/Twitter data through Xquik.",
+    categories = PluginSubGroup.PluginCategory.BUSINESS
 )
 package io.kestra.plugin.xquik;
 

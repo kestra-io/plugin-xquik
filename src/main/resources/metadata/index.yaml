@@ -2,7 +2,18 @@ group: io.kestra.plugin.xquik
 name: "xquik"
 title: "Xquik"
 description: "Xquik X/Twitter public data plugin for Kestra"
-body: ""
+body: |
+  Xquik tasks let Kestra flows retrieve public X/Twitter data for scheduled research, monitoring, and reporting workflows.
+
+  The plugin includes read-only tasks for:
+  - Searching public posts.
+  - Fetching one public post by ID.
+  - Searching public users.
+  - Fetching one public user by username or ID.
+  - Fetching recent public posts from a user.
+  - Listing regional trends.
+
+  Use `{{ secret('XQUIK_API_KEY') }}` for the `apiKey` property. Search and list tasks support `fetchType` so larger responses can be stored in Kestra internal storage.
 videos: []
 createdBy: "Kestra Core Team"
 managedBy: "Kestra Core Team"

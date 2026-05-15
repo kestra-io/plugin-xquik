@@ -1,0 +1,23 @@
+id: xquik
+namespace: io.kestra.tests
+
+inputs:
+  - id: baseUrl
+    type: STRING
+    defaults: "http://localhost:59443/api/v1"
+
+tasks:
+  - id: search_posts
+    type: io.kestra.plugin.xquik.tweets.Search
+    baseUrl: "{{ inputs.baseUrl }}"
+    apiKey: "test-api-key"
+    query: "agent framework"
+    queryType: Latest
+    limit: 10
+
+  - id: list_trends
+    type: io.kestra.plugin.xquik.trends.List
+    baseUrl: "{{ inputs.baseUrl }}"
+    apiKey: "test-api-key"
+    woeid: 1
+    count: 5
