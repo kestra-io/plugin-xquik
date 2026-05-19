@@ -16,15 +16,18 @@ import io.kestra.core.runners.RunContext;
 import io.kestra.core.serializers.FileSerde;
 import io.kestra.core.serializers.JacksonMapper;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
+import reactor.core.publisher.Flux;
 
-import java.io.BufferedOutputStream;
 import java.io.FileOutputStream;
+import java.io.OutputStreamWriter;
+import java.io.Writer;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.Charset;
@@ -32,6 +35,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
@@ -47,7 +51,8 @@ public abstract class AbstractXquikTask extends Task implements RunnableTask<Abs
         title = "Xquik API key",
         description = "API key used to authenticate Xquik API requests."
     )
-    @PluginProperty(group = "connection")
+    @NotNull
+    @PluginProperty(secret = true, group = "connection")
     protected Property<String> apiKey;
 
     @Schema(
@@ -70,7 +75,7 @@ public abstract class AbstractXquikTask extends Task implements RunnableTask<Abs
         title = "HTTP request options",
         description = "Options used to customize the HTTP client."
     )
-    @PluginProperty(dynamic = true, group = "advanced")
+    @PluginProperty(group = "advanced")
     protected RequestOptions options;
 
     protected Output get(RunContext runContext, String path, Map<String, Object> queryParameters) throws Exception {
@@ -86,12 +91,14 @@ public abstract class AbstractXquikTask extends Task implements RunnableTask<Abs
             .addHeader("x-api-key", renderedApiKey)
             .build();
 
-        try (HttpClient client = new HttpClient(runContext, httpClientConfigurationWithOptions())) {
+        try (HttpClient client = new HttpClient(runContext, httpClientConfigurationWithOptions(runContext))) {
             HttpResponse<String> response = client.request(request, String.class);
             int statusCode = response.getStatus().getCode();
 
             if (statusCode < 200 || statusCode >= 300) {
-                throw new IllegalStateException("Xquik request failed with HTTP status code: " + statusCode);
+                throw new IllegalStateException(
+                    "Xquik request failed with HTTP status code " + statusCode + responseBodySuffix(response.getBody())
+                );
             }
 
             Map<String, Object> body = JacksonMapper.ofJson().readValue(
@@ -123,7 +130,8 @@ public abstract class AbstractXquikTask extends Task implements RunnableTask<Abs
     }
 
     private Output handleFetch(RunContext runContext, Map<String, Object> body, FetchType renderedFetchType) throws Exception {
-        Integer size = responseSize(body);
+        List<?> rows = responseRows(body);
+        Integer size = rows.size();
         String nextCursor = stringValue(body.get("next_cursor")).orElseGet(() -> stringValue(body.get("nextCursor")).orElse(null));
         Boolean hasNextPage = booleanValue(body.get("has_next_page")).orElseGet(() -> booleanValue(body.get("hasNextPage")).orElse(null));
 
@@ -137,8 +145,8 @@ public abstract class AbstractXquikTask extends Task implements RunnableTask<Abs
             case STORE -> {
                 java.io.File tempFile = runContext.workingDir().createTempFile(".ion").toFile();
 
-                try (BufferedOutputStream output = new BufferedOutputStream(new FileOutputStream(tempFile))) {
-                    FileSerde.write(output, body);
+                try (Writer output = new OutputStreamWriter(new FileOutputStream(tempFile), StandardCharsets.UTF_8)) {
+                    FileSerde.writeAll(output, Flux.fromIterable(rows)).block();
                 }
 
                 yield Output.builder()
@@ -152,14 +160,22 @@ public abstract class AbstractXquikTask extends Task implements RunnableTask<Abs
         };
     }
 
-    private Integer responseSize(Map<String, Object> body) {
-        for (Object value : body.values()) {
-            if (value instanceof java.util.List<?> list) {
-                return list.size();
+    private List<?> responseRows(Map<String, Object> body) {
+        for (String key : List.of("tweets", "users", "trends", "items", "data")) {
+            Object value = body.get(key);
+            if (value instanceof List<?> list) {
+                return list;
             }
         }
 
-        return body.isEmpty() ? 0 : 1;
+        Optional<List<?>> firstList = body.entrySet()
+            .stream()
+            .filter(entry -> entry.getValue() instanceof List<?>)
+            .sorted(Map.Entry.comparingByKey())
+            .map(entry -> (List<?>) entry.getValue())
+            .findFirst();
+
+        return firstList.orElseGet(() -> body.isEmpty() ? List.of() : List.of(body));
     }
 
     private Optional<String> stringValue(Object value) {
@@ -176,6 +192,15 @@ public abstract class AbstractXquikTask extends Task implements RunnableTask<Abs
         }
 
         return Optional.empty();
+    }
+
+    private String responseBodySuffix(String body) {
+        if (body == null || body.isBlank()) {
+            return "";
+        }
+
+        String excerpt = body.length() > 1000 ? body.substring(0, 1000) + "..." : body;
+        return " with response body: " + excerpt;
     }
 
     private String trimTrailingSlash(String value) {
@@ -224,24 +249,51 @@ public abstract class AbstractXquikTask extends Task implements RunnableTask<Abs
 
     @SuppressWarnings({"rawtypes", "unchecked"})
     private Object renderPropertyValue(RunContext runContext, Property<?> property) throws IllegalVariableEvaluationException {
+        Object value = property.getValue();
+
+        if (value instanceof Integer) {
+            return runContext.render((Property) property).as(Integer.class).orElse(null);
+        }
+
+        if (value instanceof Long) {
+            return runContext.render((Property) property).as(Long.class).orElse(null);
+        }
+
+        if (value instanceof Boolean) {
+            return runContext.render((Property) property).as(Boolean.class).orElse(null);
+        }
+
+        if (value instanceof Double) {
+            return runContext.render((Property) property).as(Double.class).orElse(null);
+        }
+
         return runContext.render((Property) property).as(String.class).orElse(null);
     }
 
-    private HttpConfiguration httpClientConfigurationWithOptions() throws IllegalVariableEvaluationException {
+    private HttpConfiguration httpClientConfigurationWithOptions(RunContext runContext) throws IllegalVariableEvaluationException {
         HttpConfiguration.HttpConfigurationBuilder configuration = HttpConfiguration.builder();
 
         if (this.options != null) {
             configuration
                 .timeout(
                     TimeoutConfiguration.builder()
-                        .connectTimeout(this.options.getConnectTimeout())
-                        .readIdleTimeout(this.options.getReadIdleTimeout())
+                        .connectTimeout(renderedProperty(runContext, this.options.getConnectTimeout(), Duration.class))
+                        .readIdleTimeout(renderedProperty(runContext, this.options.getReadIdleTimeout(), Duration.class))
                         .build()
                 )
-                .defaultCharset(this.options.getDefaultCharset());
+                .defaultCharset(renderedProperty(runContext, this.options.getDefaultCharset(), Charset.class));
         }
 
         return configuration.build();
+    }
+
+    private <T> Property<T> renderedProperty(RunContext runContext, Property<T> property, Class<T> type)
+        throws IllegalVariableEvaluationException {
+        if (property == null) {
+            return null;
+        }
+
+        return runContext.render(property).as(type).map(Property::ofValue).orElse(null);
     }
 
     private HttpRequest.HttpRequestBuilder createRequestBuilder(RunContext runContext) throws IllegalVariableEvaluationException {
@@ -266,25 +318,10 @@ public abstract class AbstractXquikTask extends Task implements RunnableTask<Abs
         @PluginProperty(group = "execution")
         private final Property<Duration> connectTimeout;
 
-        @Schema(title = "Read timeout", description = "Max time allowed for reading data from the server before failing. Defaults to 10 seconds.")
-        @Builder.Default
-        @PluginProperty(group = "execution")
-        private final Property<Duration> readTimeout = Property.ofValue(Duration.ofSeconds(10));
-
         @Schema(title = "Read idle timeout", description = "How long a read connection may stay idle before closing. Defaults to 5 minutes.")
         @Builder.Default
         @PluginProperty(group = "execution")
         private final Property<Duration> readIdleTimeout = Property.ofValue(Duration.of(5, ChronoUnit.MINUTES));
-
-        @Schema(title = "Connection pool idle timeout", description = "How long an idle connection stays in the pool before closure. Defaults to 0 seconds.")
-        @Builder.Default
-        @PluginProperty(group = "execution")
-        private final Property<Duration> connectionPoolIdleTimeout = Property.ofValue(Duration.ofSeconds(0));
-
-        @Schema(title = "Max content length", description = "Maximum response size in bytes. Defaults to 10 MB.")
-        @Builder.Default
-        @PluginProperty(group = "execution")
-        private final Property<Integer> maxContentLength = Property.ofValue(1024 * 1024 * 10);
 
         @Schema(title = "Default charset", description = "Charset used for requests when none is specified. Defaults to UTF-8.")
         @Builder.Default

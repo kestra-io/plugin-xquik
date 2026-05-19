@@ -8,15 +8,34 @@ import io.micronaut.http.annotation.Get;
 import io.micronaut.http.annotation.PathVariable;
 import io.micronaut.http.annotation.Produces;
 
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Controller("/api/v1/x")
 @Produces(MediaType.APPLICATION_JSON)
 public class FakeXquikController {
-    public static Map<String, String> headers = new HashMap<>();
-    public static Map<String, String> queryParameters = new HashMap<>();
-    public static String lastPath;
+    private static final Map<String, String> headers = new ConcurrentHashMap<>();
+    private static final Map<String, String> queryParameters = new ConcurrentHashMap<>();
+    private static final AtomicReference<String> lastPath = new AtomicReference<>();
+
+    public static Map<String, String> headers() {
+        return headers;
+    }
+
+    public static Map<String, String> queryParameters() {
+        return queryParameters;
+    }
+
+    public static String lastPath() {
+        return lastPath.get();
+    }
+
+    public static void reset() {
+        headers.clear();
+        queryParameters.clear();
+        lastPath.set(null);
+    }
 
     @Get("/tweets/search")
     public HttpResponse<String> searchTweets(HttpRequest<?> request) {
@@ -105,11 +124,11 @@ public class FakeXquikController {
     }
 
     private void capture(HttpRequest<?> request, String path) {
-        lastPath = path;
-        headers = new HashMap<>();
+        lastPath.set(path);
+        headers.clear();
         request.getHeaders().forEach((name, values) -> headers.put(name.toLowerCase(), String.join(",", values)));
 
-        queryParameters = new HashMap<>();
+        queryParameters.clear();
         request.getParameters().forEach((name, values) -> queryParameters.put(name, values.getFirst()));
     }
 }

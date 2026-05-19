@@ -33,8 +33,6 @@ public abstract class AbstractXquikTest {
 
     @BeforeEach
     void reset() {
-        FakeXquikController.headers.clear();
-        FakeXquikController.queryParameters.clear();
-        FakeXquikController.lastPath = null;
+        FakeXquikController.reset();
     }
 }

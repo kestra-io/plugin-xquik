@@ -7,6 +7,7 @@ import io.kestra.core.models.property.Property;
 import io.kestra.core.runners.RunContext;
 import io.kestra.plugin.xquik.AbstractXquikTask;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotNull;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -45,6 +46,7 @@ import java.util.Map;
 )
 public class Search extends AbstractXquikTask {
     @Schema(title = "Search query", description = "User search query.")
+    @NotNull
     @PluginProperty(group = "main")
     private Property<String> query;
 

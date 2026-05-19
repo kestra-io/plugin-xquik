@@ -7,6 +7,7 @@ import io.kestra.core.models.property.Property;
 import io.kestra.core.runners.RunContext;
 import io.kestra.plugin.xquik.AbstractXquikTask;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotNull;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -47,6 +48,7 @@ import java.util.Map;
 )
 public class Tweets extends AbstractXquikTask {
     @Schema(title = "User", description = "X username without `@`, or a numeric X user ID.")
+    @NotNull
     @PluginProperty(group = "main")
     private Property<String> user;
 
@@ -65,7 +67,7 @@ public class Tweets extends AbstractXquikTask {
     private Property<Boolean> includeParentTweet = Property.ofValue(false);
 
     @Schema(title = "Additional query parameters", description = "Optional Xquik tweet filters, such as language, hashtags, mediaType, or sinceDate.")
-    @PluginProperty(dynamic = true, group = "advanced")
+    @PluginProperty(group = "advanced")
     private Property<Map<String, Object>> additionalQueryParameters;
 
     @Override

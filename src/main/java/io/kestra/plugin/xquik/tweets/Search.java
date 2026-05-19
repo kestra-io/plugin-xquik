@@ -7,6 +7,7 @@ import io.kestra.core.models.property.Property;
 import io.kestra.core.runners.RunContext;
 import io.kestra.plugin.xquik.AbstractXquikTask;
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotNull;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -68,6 +69,7 @@ public class Search extends AbstractXquikTask {
     }
 
     @Schema(title = "Search query", description = "X search query, including standard operators such as `from:`, `to:`, or hashtags.")
+    @NotNull
     @PluginProperty(group = "main")
     private Property<String> query;
 
@@ -94,7 +96,7 @@ public class Search extends AbstractXquikTask {
     private Property<String> untilTime;
 
     @Schema(title = "Additional query parameters", description = "Optional Xquik tweet-search filters, such as language, hashtags, mediaType, or minFaves.")
-    @PluginProperty(dynamic = true, group = "advanced")
+    @PluginProperty(group = "advanced")
     private Property<Map<String, Object>> additionalQueryParameters;
 
     @Override
