@@ -1,0 +1,8 @@
+group: io.kestra.plugin.xquik.tweets
+name: "tweets"
+title: "Xquik Tweets"
+description: "Tasks that search and retrieve public X/Twitter posts with Xquik."
+body: "Use these tasks to search public posts, fetch one post by ID, and store larger responses in Kestra internal storage. Set `apiKey` with `{{ secret('XQUIK_API_KEY') }}`."
+videos: []
+createdBy: "Kestra Core Team"
+managedBy: "Kestra Core Team"

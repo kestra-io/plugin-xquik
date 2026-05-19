@@ -25,7 +25,13 @@ Infrastructure dependencies (Docker Compose services):
 
 ### Key Plugin Classes
 
-- `io.kestra.plugin.xquik` (package — classes to be added per endpoint)
+- `io.kestra.plugin.xquik.AbstractXquikTask` - shared Xquik API request and `fetchType` handling.
+- `io.kestra.plugin.xquik.tweets.Search` - search public posts.
+- `io.kestra.plugin.xquik.tweets.Get` - retrieve one post by ID.
+- `io.kestra.plugin.xquik.users.Search` - search public users.
+- `io.kestra.plugin.xquik.users.Get` - retrieve one user by username or ID.
+- `io.kestra.plugin.xquik.users.Tweets` - retrieve recent public posts from a user.
+- `io.kestra.plugin.xquik.trends.List` - retrieve regional trends.
 
 ### Project Structure
 

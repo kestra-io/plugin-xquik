@@ -37,16 +37,56 @@
 
 # Kestra Xquik Plugin
 
+Run read-only Xquik API calls from Kestra flows. This plugin retrieves public
+X/Twitter posts, users, timelines, and trends for scheduled research,
+monitoring, reporting, and downstream automation.
+
 ## Why
 
-- What user problem does this solve? Teams need a reliable, scheduled way to collect public X/Twitter data (tweets, users, timelines, trends) without building custom API integrations from scratch.
-- Why would a team adopt this plugin in a workflow? It provides ready-made tasks for the Xquik X/Twitter API, enabling direct integration with downstream notifications, data warehouse updates, or trend-monitoring workflows.
-- What operational/business outcome does it enable? It reduces integration effort, centralises credential management, and makes X/Twitter data collection repeatable and observable within Kestra.
+- Teams need a reliable, scheduled way to collect public X/Twitter data without
+  building custom API integrations.
+- Xquik tasks return structured responses that can feed notifications, storage,
+  analytics, or approval workflows.
+- Kestra manages scheduling, secrets, retries, observability, and downstream
+  orchestration around the API call.
 
 ## What
 
 - Provides plugin components under `io.kestra.plugin.xquik`.
-- Covers read-only Xquik API endpoints: tweet search, user lookup, user timeline, and trend data.
+- Covers read-only Xquik API endpoints: tweet search, tweet lookup, user search,
+  user lookup, user timeline, and trend data.
+- Supports `fetchType` so larger search or timeline responses can be stored in
+  Kestra internal storage.
+
+## Tasks
+
+- `io.kestra.plugin.xquik.tweets.Search`
+- `io.kestra.plugin.xquik.tweets.Get`
+- `io.kestra.plugin.xquik.users.Search`
+- `io.kestra.plugin.xquik.users.Get`
+- `io.kestra.plugin.xquik.users.Tweets`
+- `io.kestra.plugin.xquik.trends.List`
+
+## Example
+
+```yaml
+id: xquik_daily_research
+namespace: company.research
+
+tasks:
+  - id: search_posts
+    type: io.kestra.plugin.xquik.tweets.Search
+    apiKey: "{{ secret('XQUIK_API_KEY') }}"
+    query: "from:kestra_io orchestration"
+    queryType: Latest
+    limit: 20
+
+  - id: list_trends
+    type: io.kestra.plugin.xquik.trends.List
+    apiKey: "{{ secret('XQUIK_API_KEY') }}"
+    woeid: 1
+    count: 10
+```
 
 ## Documentation
 * Full documentation can be found under: [kestra.io/docs](https://kestra.io/docs)
