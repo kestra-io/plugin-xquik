@@ -1,0 +1,8 @@
+group: io.kestra.plugin.xquik.users
+name: "users"
+title: "Xquik Users"
+description: "Tasks that search users and retrieve public X/Twitter profile data with Xquik."
+body: "Use these tasks to search users, fetch one user by username or ID, and retrieve recent public posts from a user. Set `apiKey` with `{{ secret('XQUIK_API_KEY') }}`."
+videos: []
+createdBy: "Kestra Core Team"
+managedBy: "Kestra Core Team"

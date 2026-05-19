@@ -1,0 +1,8 @@
+group: io.kestra.plugin.xquik.trends
+name: "trends"
+title: "Xquik Trends"
+description: "Tasks that retrieve public X/Twitter trends with Xquik."
+body: "Use these tasks to list regional or worldwide X/Twitter trends for scheduled research and monitoring flows. Set `apiKey` with `{{ secret('XQUIK_API_KEY') }}`."
+videos: []
+createdBy: "Kestra Core Team"
+managedBy: "Kestra Core Team"
