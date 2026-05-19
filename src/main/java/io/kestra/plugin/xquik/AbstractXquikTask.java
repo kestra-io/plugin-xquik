@@ -172,7 +172,7 @@ public abstract class AbstractXquikTask extends Task implements RunnableTask<Abs
             .stream()
             .filter(entry -> entry.getValue() instanceof List<?>)
             .sorted(Map.Entry.comparingByKey())
-            .map(entry -> (List<?>) entry.getValue())
+            .<List<?>>map(entry -> (List<?>) entry.getValue())
             .findFirst();
 
         return firstList.orElseGet(() -> body.isEmpty() ? List.of() : List.of(body));
@@ -249,25 +249,30 @@ public abstract class AbstractXquikTask extends Task implements RunnableTask<Abs
 
     @SuppressWarnings({"rawtypes", "unchecked"})
     private Object renderPropertyValue(RunContext runContext, Property<?> property) throws IllegalVariableEvaluationException {
-        Object value = property.getValue();
+        // Attempt numeric/boolean rendering first; fall back to String for everything else.
+        var rendered = runContext.render((Property) property);
 
-        if (value instanceof Integer) {
-            return runContext.render((Property) property).as(Integer.class).orElse(null);
+        var asInteger = rendered.as(Integer.class);
+        if (asInteger.isPresent()) {
+            return asInteger.get();
         }
 
-        if (value instanceof Long) {
-            return runContext.render((Property) property).as(Long.class).orElse(null);
+        var asLong = rendered.as(Long.class);
+        if (asLong.isPresent()) {
+            return asLong.get();
         }
 
-        if (value instanceof Boolean) {
-            return runContext.render((Property) property).as(Boolean.class).orElse(null);
+        var asDouble = rendered.as(Double.class);
+        if (asDouble.isPresent()) {
+            return asDouble.get();
         }
 
-        if (value instanceof Double) {
-            return runContext.render((Property) property).as(Double.class).orElse(null);
+        var asBoolean = rendered.as(Boolean.class);
+        if (asBoolean.isPresent()) {
+            return asBoolean.get();
         }
 
-        return runContext.render((Property) property).as(String.class).orElse(null);
+        return rendered.as(String.class).orElse(null);
     }
 
     private HttpConfiguration httpClientConfigurationWithOptions(RunContext runContext) throws IllegalVariableEvaluationException {
