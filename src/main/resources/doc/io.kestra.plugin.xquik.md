@@ -4,7 +4,7 @@ Retrieve public X/Twitter posts, users, and trends via the Xquik API from Kestra
 
 ## Authentication
 
-All tasks require `apiKey` (your Xquik API key, required). Optionally set `baseUrl` (default `https://xquik.com/api/v1`) and `options` for HTTP client configuration (connect timeout, read idle timeout, custom headers). Store the API key in [secrets](https://kestra.io/docs/concepts/secret) and apply connection properties globally with [plugin defaults](https://kestra.io/docs/workflow-components/plugin-defaults).
+All tasks require `apiKey` (your Xquik API key, required). Optionally set `baseUrl` (default `https://xquik.com/api/v1`) and `options` for HTTP client configuration (connect timeout, read idle timeout, custom headers). Store the API key in [secrets](https://kestra.io/docs/concepts/secret) and set connection properties on each task.
 
 ## Tasks
 
