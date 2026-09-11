@@ -1,5 +1,6 @@
 package io.kestra.plugin.xquik.users;
 
+import com.x_twitter_scraper.api.models.x.users.UserRetrieveTweetsParams;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
 import io.kestra.core.models.annotations.PluginProperty;
@@ -14,7 +15,6 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 @SuperBuilder
@@ -72,14 +72,26 @@ public class Tweets extends AbstractXquikTask {
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        String renderedUser = runContext.render(this.user).as(String.class).orElseThrow().replaceFirst("^@", "");
+        Map<String, Object> additional = additionalQueryParameters(runContext, this.additionalQueryParameters);
 
-        Map<String, Object> params = new LinkedHashMap<>();
-        params.put("cursor", this.cursor);
-        params.put("includeReplies", this.includeReplies);
-        params.put("includeParentTweet", this.includeParentTweet);
-        renderedMap(runContext, this.additionalQueryParameters).ifPresent(params::putAll);
+        UserRetrieveTweetsParams.Builder params = UserRetrieveTweetsParams.builder()
+            .id(runContext.render(this.user).as(String.class).orElseThrow().replaceFirst("^@", ""));
 
-        return get(runContext, "/x/users/" + pathSegment(renderedUser) + "/tweets", params);
+        // A key given in additionalQueryParameters replaced the property before the SDK migration.
+        if (!additional.containsKey("cursor")) {
+            runContext.render(this.cursor).as(String.class).filter(value -> !value.isBlank()).ifPresent(params::cursor);
+        }
+
+        if (!additional.containsKey("includeReplies")) {
+            runContext.render(this.includeReplies).as(Boolean.class).ifPresent(params::includeReplies);
+        }
+
+        if (!additional.containsKey("includeParentTweet")) {
+            runContext.render(this.includeParentTweet).as(Boolean.class).ifPresent(params::includeParentTweet);
+        }
+
+        additional.forEach((key, value) -> params.putAdditionalQueryParam(key, String.valueOf(value)));
+
+        return call(runContext, client -> client.x().users().withRawResponse().retrieveTweets(params.build()));
     }
 }

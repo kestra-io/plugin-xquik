@@ -1,5 +1,6 @@
 package io.kestra.plugin.xquik.tweets;
 
+import com.x_twitter_scraper.api.models.x.tweets.TweetSearchParams;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
 import io.kestra.core.models.annotations.PluginProperty;
@@ -14,7 +15,6 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 @SuperBuilder
@@ -101,15 +101,42 @@ public class Search extends AbstractXquikTask {
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        Map<String, Object> params = new LinkedHashMap<>();
-        params.put("q", this.query);
-        params.put("queryType", this.queryType);
-        params.put("limit", this.limit);
-        params.put("cursor", this.cursor);
-        params.put("sinceTime", this.sinceTime);
-        params.put("untilTime", this.untilTime);
-        renderedMap(runContext, this.additionalQueryParameters).ifPresent(params::putAll);
+        Map<String, Object> additional = additionalQueryParameters(runContext, this.additionalQueryParameters);
 
-        return get(runContext, "/x/tweets/search", params);
+        // A key given in additionalQueryParameters replaced the property before the SDK migration.
+        // The SDK appends instead, which would put the parameter on the wire twice, so the property gives way.
+        TweetSearchParams.Builder params = TweetSearchParams.builder()
+            .q(additional.containsKey("q")
+                ? String.valueOf(additional.get("q"))
+                : runContext.render(this.query).as(String.class).orElseThrow());
+
+        if (!additional.containsKey("queryType")) {
+            runContext.render(this.queryType).as(QueryType.class)
+                .ifPresent(value -> params.queryType(TweetSearchParams.QueryType.of(value.name())));
+        }
+
+        if (!additional.containsKey("limit")) {
+            runContext.render(this.limit).as(Integer.class).ifPresent(value -> params.limit(value.longValue()));
+        }
+
+        if (!additional.containsKey("cursor")) {
+            runContext.render(this.cursor).as(String.class).filter(value -> !value.isBlank()).ifPresent(params::cursor);
+        }
+
+        if (!additional.containsKey("sinceTime")) {
+            runContext.render(this.sinceTime).as(String.class).filter(value -> !value.isBlank()).ifPresent(params::sinceTime);
+        }
+
+        if (!additional.containsKey("untilTime")) {
+            runContext.render(this.untilTime).as(String.class).filter(value -> !value.isBlank()).ifPresent(params::untilTime);
+        }
+
+        additional.forEach((key, value) -> {
+            if (!"q".equals(key)) {
+                params.putAdditionalQueryParam(key, String.valueOf(value));
+            }
+        });
+
+        return call(runContext, client -> client.x().tweets().withRawResponse().search(params.build()));
     }
 }

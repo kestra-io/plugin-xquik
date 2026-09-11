@@ -1,5 +1,6 @@
 package io.kestra.plugin.xquik.users;
 
+import com.x_twitter_scraper.api.models.x.users.UserRetrieveParams;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
 import io.kestra.core.models.annotations.PluginProperty;
@@ -13,8 +14,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
-
-import java.util.Map;
 
 @SuperBuilder
 @ToString
@@ -51,7 +50,10 @@ public class Get extends AbstractXquikTask {
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        String renderedUser = runContext.render(this.user).as(String.class).orElseThrow().replaceFirst("^@", "");
-        return get(runContext, "/x/users/" + pathSegment(renderedUser), Map.of());
+        UserRetrieveParams params = UserRetrieveParams.builder()
+            .id(runContext.render(this.user).as(String.class).orElseThrow().replaceFirst("^@", ""))
+            .build();
+
+        return call(runContext, client -> client.x().users().withRawResponse().retrieve(params));
     }
 }

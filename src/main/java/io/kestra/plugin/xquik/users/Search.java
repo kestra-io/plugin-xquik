@@ -1,5 +1,6 @@
 package io.kestra.plugin.xquik.users;
 
+import com.x_twitter_scraper.api.models.x.users.UserRetrieveSearchParams;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
 import io.kestra.core.models.annotations.PluginProperty;
@@ -13,9 +14,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
-
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 @SuperBuilder
 @ToString
@@ -56,10 +54,11 @@ public class Search extends AbstractXquikTask {
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        Map<String, Object> params = new LinkedHashMap<>();
-        params.put("q", this.query);
-        params.put("cursor", this.cursor);
+        UserRetrieveSearchParams.Builder params = UserRetrieveSearchParams.builder()
+            .q(runContext.render(this.query).as(String.class).orElseThrow());
 
-        return get(runContext, "/x/users/search", params);
+        runContext.render(this.cursor).as(String.class).filter(value -> !value.isBlank()).ifPresent(params::cursor);
+
+        return call(runContext, client -> client.x().users().withRawResponse().retrieveSearch(params.build()));
     }
 }

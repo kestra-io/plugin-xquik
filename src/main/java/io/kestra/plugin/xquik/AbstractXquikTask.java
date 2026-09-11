@@ -1,12 +1,14 @@
 package io.kestra.plugin.xquik;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
+import com.x_twitter_scraper.api.client.XTwitterScraperClient;
+import com.x_twitter_scraper.api.client.okhttp.XTwitterScraperOkHttpClient;
+import com.x_twitter_scraper.api.core.ObjectMappers;
+import com.x_twitter_scraper.api.core.Timeout;
+import com.x_twitter_scraper.api.core.http.HttpResponseFor;
+import com.x_twitter_scraper.api.errors.XTwitterScraperServiceException;
 import io.kestra.core.exceptions.IllegalVariableEvaluationException;
-import io.kestra.core.http.HttpRequest;
-import io.kestra.core.http.HttpResponse;
-import io.kestra.core.http.client.HttpClient;
-import io.kestra.core.http.client.configurations.HttpConfiguration;
-import io.kestra.core.http.client.configurations.TimeoutConfiguration;
 import io.kestra.core.models.annotations.PluginProperty;
 import io.kestra.core.models.property.Property;
 import io.kestra.core.models.tasks.RunnableTask;
@@ -29,7 +31,6 @@ import java.io.FileOutputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
 import java.net.URI;
-import java.net.URLEncoder;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -78,55 +79,92 @@ public abstract class AbstractXquikTask extends Task implements RunnableTask<Abs
     @PluginProperty(group = "advanced")
     protected RequestOptions options;
 
-    protected Output get(RunContext runContext, String path, Map<String, Object> queryParameters) throws Exception {
-        String renderedBaseUrl = runContext.render(this.baseUrl).as(String.class).orElse(DEFAULT_BASE_URL);
-        String renderedApiKey = runContext.render(this.apiKey).as(String.class).orElseThrow();
+    /** One Xquik SDK call, kept as a lambda so each task only builds its own typed params. */
+    @FunctionalInterface
+    protected interface XquikCall {
+        HttpResponseFor<?> execute(XTwitterScraperClient client);
+    }
+
+    protected Output call(RunContext runContext, XquikCall call) throws Exception {
         FetchType renderedFetchType = runContext.render(this.fetchType).as(FetchType.class).orElse(FetchType.FETCH);
 
-        URI uri = URI.create(trimTrailingSlash(renderedBaseUrl) + path + queryString(runContext, queryParameters));
-        HttpRequest request = createRequestBuilder(runContext)
-            .uri(uri)
-            .method("GET")
-            .addHeader("Accept", "application/json")
-            .addHeader("x-api-key", renderedApiKey)
-            .build();
+        XTwitterScraperClient client = client(runContext);
 
-        try (HttpClient client = new HttpClient(runContext, httpClientConfigurationWithOptions(runContext))) {
-            HttpResponse<String> response = client.request(request, String.class);
-            int statusCode = response.getStatus().getCode();
-
-            if (statusCode < 200 || statusCode >= 300) {
-                throw new IllegalStateException(
-                    "Xquik request failed with HTTP status code " + statusCode + responseBodySuffix(response.getBody())
+        try {
+            // Read the untouched response stream rather than the SDK's typed model, so the `body`
+            // output stays exactly the JSON Xquik returned.
+            try (HttpResponseFor<?> response = call.execute(client)) {
+                Map<String, Object> body = JacksonMapper.ofJson().readValue(
+                    response.body(),
+                    new TypeReference<>() {}
                 );
+
+                return handleFetch(runContext, body, renderedFetchType);
             }
-
-            Map<String, Object> body = JacksonMapper.ofJson().readValue(
-                response.getBody(),
-                new TypeReference<>() {}
+        } catch (XTwitterScraperServiceException e) {
+            throw new IllegalStateException(
+                "Xquik request failed with HTTP status code " + e.statusCode() + responseBodySuffix(errorBody(e)),
+                e
             );
-
-            return handleFetch(runContext, body, renderedFetchType);
+        } finally {
+            client.close();
         }
     }
 
-    protected Map<String, Object> parameters(Map<String, Object> values) {
-        Map<String, Object> filtered = new LinkedHashMap<>();
-        values.forEach((key, value) -> {
-            if (value != null && !String.valueOf(value).isBlank()) {
-                filtered.put(key, value);
-            }
-        });
-        return filtered;
-    }
+    private XTwitterScraperClient client(RunContext runContext) throws IllegalVariableEvaluationException {
+        XTwitterScraperOkHttpClient.Builder builder = XTwitterScraperOkHttpClient.builder()
+            .apiKey(runContext.render(this.apiKey).as(String.class).orElseThrow())
+            .baseUrl(runContext.render(this.baseUrl).as(String.class).orElse(DEFAULT_BASE_URL))
+            // The previous client sent this and did not retry; keep both so the request is unchanged.
+            .putHeader("Accept", "application/json")
+            .maxRetries(0);
 
-    protected String pathSegment(String value) {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
+        // Kestra's HTTP client applies no connect, read or overall call timeout unless asked, so start
+        // from uncapped. The SDK would otherwise default to one minute each, including a 60s call cap.
+        Timeout.Builder timeout = Timeout.builder()
+            .connect(Duration.ZERO)
+            .read(Duration.ZERO)
+            .write(Duration.ZERO)
+            .request(Duration.ZERO);
+
+        if (this.options != null) {
+            runContext.render(this.options.getConnectTimeout()).as(Duration.class).ifPresent(timeout::connect);
+            runContext.render(this.options.getReadIdleTimeout()).as(Duration.class).ifPresent(timeout::read);
+
+            Map<String, String> rHeaders = runContext.render(this.options.getHeaders()).asMap(String.class, String.class);
+            if (rHeaders != null) {
+                rHeaders.forEach(builder::putHeader);
+            }
+
+            Charset rCharset = runContext.render(this.options.getDefaultCharset()).as(Charset.class).orElse(StandardCharsets.UTF_8);
+            if (!StandardCharsets.UTF_8.equals(rCharset)) {
+                runContext.logger().warn(
+                    "defaultCharset is set to {} but Xquik responses are always decoded as UTF-8; the value is ignored.",
+                    rCharset
+                );
+            }
+        }
+
+        return builder.timeout(timeout.build()).build();
     }
 
     protected Optional<Map<String, Object>> renderedMap(RunContext runContext, Property<Map<String, Object>> value)
         throws IllegalVariableEvaluationException {
         return Optional.ofNullable(runContext.render(value).asMap(String.class, Object.class));
+    }
+
+    /** These went through the same null/blank filter as the named properties before the SDK migration. */
+    protected Map<String, Object> additionalQueryParameters(RunContext runContext, Property<Map<String, Object>> value)
+        throws IllegalVariableEvaluationException {
+        Map<String, Object> filtered = new LinkedHashMap<>();
+
+        renderedMap(runContext, value).orElse(Map.of()).forEach((key, entry) -> {
+            if (entry != null && !String.valueOf(entry).isBlank()) {
+                filtered.put(key, entry);
+            }
+        });
+
+        return filtered;
     }
 
     private Output handleFetch(RunContext runContext, Map<String, Object> body, FetchType renderedFetchType) throws Exception {
@@ -194,6 +232,17 @@ public abstract class AbstractXquikTask extends Task implements RunnableTask<Abs
         return Optional.empty();
     }
 
+    /** The SDK hands back the error body as a JsonValue; render it as JSON rather than a Java map toString. */
+    private String errorBody(XTwitterScraperServiceException e) {
+        try {
+            String body = ObjectMappers.jsonMapper().writeValueAsString(e.body());
+            // The SDK swaps an unparseable body (an HTML gateway error, say) for a missing value.
+            return "null".equals(body) ? "" : body;
+        } catch (JsonProcessingException ignored) {
+            return "";
+        }
+    }
+
     private String responseBodySuffix(String body) {
         if (body == null || body.isBlank()) {
             return "";
@@ -201,119 +250,6 @@ public abstract class AbstractXquikTask extends Task implements RunnableTask<Abs
 
         String excerpt = body.length() > 1000 ? body.substring(0, 1000) + "..." : body;
         return " with response body: " + excerpt;
-    }
-
-    private String trimTrailingSlash(String value) {
-        return value.replaceAll("/+$", "");
-    }
-
-    private String queryString(RunContext runContext, Map<String, Object> queryParameters) throws IllegalVariableEvaluationException {
-        Map<String, Object> renderedParameters = new LinkedHashMap<>();
-
-        for (Map.Entry<String, Object> entry : queryParameters.entrySet()) {
-            Object value = entry.getValue();
-            if (value instanceof Property<?> property) {
-                value = renderPropertyValue(runContext, property);
-            }
-
-            if (value != null && !String.valueOf(value).isBlank()) {
-                renderedParameters.put(entry.getKey(), value);
-            }
-        }
-
-        if (renderedParameters.isEmpty()) {
-            return "";
-        }
-
-        StringBuilder builder = new StringBuilder("?");
-        boolean first = true;
-
-        for (Map.Entry<String, Object> entry : renderedParameters.entrySet()) {
-            if (!first) {
-                builder.append("&");
-            }
-
-            builder
-                .append(encode(entry.getKey()))
-                .append("=")
-                .append(encode(String.valueOf(entry.getValue())));
-            first = false;
-        }
-
-        return builder.toString();
-    }
-
-    private String encode(String value) {
-        return URLEncoder.encode(value, StandardCharsets.UTF_8);
-    }
-
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    private Object renderPropertyValue(RunContext runContext, Property<?> property) throws IllegalVariableEvaluationException {
-        // Attempt numeric/boolean rendering first; fall back to String for everything else.
-        var rendered = runContext.render((Property) property);
-
-        var asInteger = rendered.as(Integer.class);
-        if (asInteger.isPresent()) {
-            return asInteger.get();
-        }
-
-        var asLong = rendered.as(Long.class);
-        if (asLong.isPresent()) {
-            return asLong.get();
-        }
-
-        var asDouble = rendered.as(Double.class);
-        if (asDouble.isPresent()) {
-            return asDouble.get();
-        }
-
-        var asBoolean = rendered.as(Boolean.class);
-        if (asBoolean.isPresent()) {
-            return asBoolean.get();
-        }
-
-        return rendered.as(String.class).orElse(null);
-    }
-
-    private HttpConfiguration httpClientConfigurationWithOptions(RunContext runContext) throws IllegalVariableEvaluationException {
-        HttpConfiguration.HttpConfigurationBuilder configuration = HttpConfiguration.builder();
-
-        if (this.options != null) {
-            configuration
-                .timeout(
-                    TimeoutConfiguration.builder()
-                        .connectTimeout(renderedProperty(runContext, this.options.getConnectTimeout(), Duration.class))
-                        .readIdleTimeout(renderedProperty(runContext, this.options.getReadIdleTimeout(), Duration.class))
-                        .build()
-                )
-                .defaultCharset(renderedProperty(runContext, this.options.getDefaultCharset(), Charset.class));
-        }
-
-        return configuration.build();
-    }
-
-    private <T> Property<T> renderedProperty(RunContext runContext, Property<T> property, Class<T> type)
-        throws IllegalVariableEvaluationException {
-        if (property == null) {
-            return null;
-        }
-
-        return runContext.render(property).as(type).map(Property::ofValue).orElse(null);
-    }
-
-    private HttpRequest.HttpRequestBuilder createRequestBuilder(RunContext runContext) throws IllegalVariableEvaluationException {
-        HttpRequest.HttpRequestBuilder builder = HttpRequest.builder();
-
-        if (this.options != null && this.options.getHeaders() != null) {
-            Map<String, String> headers = runContext.render(this.options.getHeaders())
-                .asMap(String.class, String.class);
-
-            if (headers != null) {
-                headers.forEach(builder::addHeader);
-            }
-        }
-
-        return builder;
     }
 
     @Getter
@@ -328,7 +264,7 @@ public abstract class AbstractXquikTask extends Task implements RunnableTask<Abs
         @PluginProperty(group = "execution")
         private final Property<Duration> readIdleTimeout = Property.ofValue(Duration.of(5, ChronoUnit.MINUTES));
 
-        @Schema(title = "Default charset", description = "Charset used for requests when none is specified. Defaults to UTF-8.")
+        @Schema(title = "Default charset", description = "Ignored. Xquik responses are always decoded as UTF-8. Kept so existing flows keep validating.")
         @Builder.Default
         @PluginProperty(group = "advanced")
         private final Property<Charset> defaultCharset = Property.ofValue(StandardCharsets.UTF_8);
