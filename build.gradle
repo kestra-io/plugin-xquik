@@ -14,6 +14,13 @@ plugins {
 
 def isBuildSnapshot = version.toString().endsWith("-SNAPSHOT")
 
+// Kestra already ships Jackson on the runtime classpath; keep the SDK from bundling a second copy.
+def kestraProvidedJackson = { dep ->
+    dep.exclude group: 'com.fasterxml.jackson.core'
+    dep.exclude group: 'com.fasterxml.jackson.datatype', module: 'jackson-datatype-jdk8'
+    dep.exclude group: 'com.fasterxml.jackson.datatype', module: 'jackson-datatype-jsr310'
+}
+
 repositories {
     mavenLocal()
     mavenCentral()
@@ -50,6 +57,9 @@ dependencies {
     annotationProcessor group: "io.kestra", name: "processor", version: kestraVersion
     compileOnly group: "io.kestra", name: "core", version: kestraVersion
     compileOnly group: "io.kestra", name: "script", version: kestraVersion
+
+    // xquik
+    implementation(group: "com.xquik.api", name: "x-twitter-scraper-java", version: "0.10.3", kestraProvidedJackson)
 }
 
 

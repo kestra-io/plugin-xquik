@@ -57,6 +57,15 @@ public class FakeXquikController {
     @Get("/tweets/{id}")
     public HttpResponse<String> getTweet(HttpRequest<?> request, @PathVariable String id) {
         capture(request, "/x/tweets/" + id);
+
+        if ("unknown".equals(id)) {
+            return HttpResponse.badRequest("""
+                {
+                  "error": "tweet not available"
+                }
+                """);
+        }
+
         return HttpResponse.ok("""
             {
               "id": "%s",

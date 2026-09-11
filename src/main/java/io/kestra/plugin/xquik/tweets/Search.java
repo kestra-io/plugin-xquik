@@ -1,5 +1,6 @@
 package io.kestra.plugin.xquik.tweets;
 
+import com.x_twitter_scraper.api.models.x.tweets.TweetSearchParams;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
 import io.kestra.core.models.annotations.PluginProperty;
@@ -14,7 +15,6 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 @SuperBuilder
@@ -101,15 +101,20 @@ public class Search extends AbstractXquikTask {
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        Map<String, Object> params = new LinkedHashMap<>();
-        params.put("q", this.query);
-        params.put("queryType", this.queryType);
-        params.put("limit", this.limit);
-        params.put("cursor", this.cursor);
-        params.put("sinceTime", this.sinceTime);
-        params.put("untilTime", this.untilTime);
-        renderedMap(runContext, this.additionalQueryParameters).ifPresent(params::putAll);
+        TweetSearchParams.Builder params = TweetSearchParams.builder()
+            .q(runContext.render(this.query).as(String.class).orElseThrow());
 
-        return get(runContext, "/x/tweets/search", params);
+        renderedValue(runContext, this.queryType, QueryType.class)
+            .ifPresent(value -> params.queryType(TweetSearchParams.QueryType.of(value.name())));
+        renderedValue(runContext, this.limit, Integer.class).ifPresent(value -> params.limit(value.longValue()));
+        renderedValue(runContext, this.cursor, String.class).ifPresent(params::cursor);
+        renderedValue(runContext, this.sinceTime, String.class).ifPresent(params::sinceTime);
+        renderedValue(runContext, this.untilTime, String.class).ifPresent(params::untilTime);
+
+        for (Map.Entry<String, Object> entry : renderedMap(runContext, this.additionalQueryParameters).orElse(Map.of()).entrySet()) {
+            params.putAdditionalQueryParam(entry.getKey(), String.valueOf(entry.getValue()));
+        }
+
+        return call(runContext, client -> client.x().tweets().withRawResponse().search(params.build()));
     }
 }

@@ -1,5 +1,6 @@
 package io.kestra.plugin.xquik.tweets;
 
+import com.x_twitter_scraper.api.models.x.tweets.TweetRetrieveParams;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
 import io.kestra.core.models.annotations.PluginProperty;
@@ -13,8 +14,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
-
-import java.util.Map;
 
 @SuperBuilder
 @ToString
@@ -51,7 +50,10 @@ public class Get extends AbstractXquikTask {
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        String renderedTweetId = runContext.render(this.tweetId).as(String.class).orElseThrow();
-        return get(runContext, "/x/tweets/" + pathSegment(renderedTweetId), Map.of());
+        TweetRetrieveParams params = TweetRetrieveParams.builder()
+            .id(runContext.render(this.tweetId).as(String.class).orElseThrow())
+            .build();
+
+        return call(runContext, client -> client.x().tweets().withRawResponse().retrieve(params));
     }
 }

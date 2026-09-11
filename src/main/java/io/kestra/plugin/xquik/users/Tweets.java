@@ -1,5 +1,6 @@
 package io.kestra.plugin.xquik.users;
 
+import com.x_twitter_scraper.api.models.x.users.UserRetrieveTweetsParams;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
 import io.kestra.core.models.annotations.PluginProperty;
@@ -14,7 +15,6 @@ import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 @SuperBuilder
@@ -72,14 +72,17 @@ public class Tweets extends AbstractXquikTask {
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        String renderedUser = runContext.render(this.user).as(String.class).orElseThrow().replaceFirst("^@", "");
+        UserRetrieveTweetsParams.Builder params = UserRetrieveTweetsParams.builder()
+            .id(runContext.render(this.user).as(String.class).orElseThrow().replaceFirst("^@", ""));
 
-        Map<String, Object> params = new LinkedHashMap<>();
-        params.put("cursor", this.cursor);
-        params.put("includeReplies", this.includeReplies);
-        params.put("includeParentTweet", this.includeParentTweet);
-        renderedMap(runContext, this.additionalQueryParameters).ifPresent(params::putAll);
+        renderedValue(runContext, this.cursor, String.class).ifPresent(params::cursor);
+        renderedValue(runContext, this.includeReplies, Boolean.class).ifPresent(params::includeReplies);
+        renderedValue(runContext, this.includeParentTweet, Boolean.class).ifPresent(params::includeParentTweet);
 
-        return get(runContext, "/x/users/" + pathSegment(renderedUser) + "/tweets", params);
+        for (Map.Entry<String, Object> entry : renderedMap(runContext, this.additionalQueryParameters).orElse(Map.of()).entrySet()) {
+            params.putAdditionalQueryParam(entry.getKey(), String.valueOf(entry.getValue()));
+        }
+
+        return call(runContext, client -> client.x().users().withRawResponse().retrieveTweets(params.build()));
     }
 }

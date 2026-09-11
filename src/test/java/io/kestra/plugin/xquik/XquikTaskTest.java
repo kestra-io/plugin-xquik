@@ -18,6 +18,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.notNullValue;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 
 class XquikTaskTest extends AbstractXquikTest {
     @Inject
@@ -133,6 +134,40 @@ class XquikTaskTest extends AbstractXquikTest {
 
         assertThat(rows.size(), is(1));
         assertThat(rows.getFirst().toString(), containsString("User timeline post"));
+    }
+
+    @Test
+    void searchTweetsForwardsAdditionalQueryParameters() throws Exception {
+        var runContext = runContextFactory.of();
+
+        var task = io.kestra.plugin.xquik.tweets.Search.builder()
+            .baseUrl(Property.ofValue(embeddedServer.getURI() + "/api/v1"))
+            .apiKey(Property.ofValue("test-api-key"))
+            .query(Property.ofValue("kestra"))
+            .additionalQueryParameters(Property.ofValue(Map.of("language", "en", "minFaves", 10)))
+            .build();
+
+        task.run(runContext);
+
+        assertThat(FakeXquikController.lastPath(), is("/x/tweets/search"));
+        assertThat(FakeXquikController.queryParameters().get("language"), is("en"));
+        assertThat(FakeXquikController.queryParameters().get("minFaves"), is("10"));
+    }
+
+    @Test
+    void failedRequestReportsStatusCodeAndBody() {
+        var runContext = runContextFactory.of();
+
+        var task = io.kestra.plugin.xquik.tweets.Get.builder()
+            .baseUrl(Property.ofValue(embeddedServer.getURI() + "/api/v1"))
+            .apiKey(Property.ofValue("test-api-key"))
+            .tweetId(Property.ofValue("unknown"))
+            .build();
+
+        var exception = assertThrows(IllegalStateException.class, () -> task.run(runContext));
+
+        assertThat(exception.getMessage(), containsString("Xquik request failed with HTTP status code 400"));
+        assertThat(exception.getMessage(), containsString("tweet not available"));
     }
 
     @Test

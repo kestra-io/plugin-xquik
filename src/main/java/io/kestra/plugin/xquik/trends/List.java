@@ -1,5 +1,6 @@
 package io.kestra.plugin.xquik.trends;
 
+import com.x_twitter_scraper.api.models.x.XGetTrendsParams;
 import io.kestra.core.models.annotations.Example;
 import io.kestra.core.models.annotations.Plugin;
 import io.kestra.core.models.annotations.PluginProperty;
@@ -12,9 +13,6 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.ToString;
 import lombok.experimental.SuperBuilder;
-
-import java.util.LinkedHashMap;
-import java.util.Map;
 
 @SuperBuilder
 @ToString
@@ -57,10 +55,11 @@ public class List extends AbstractXquikTask {
 
     @Override
     public Output run(RunContext runContext) throws Exception {
-        Map<String, Object> params = new LinkedHashMap<>();
-        params.put("woeid", this.woeid);
-        params.put("count", this.count);
+        XGetTrendsParams.Builder params = XGetTrendsParams.builder();
 
-        return get(runContext, "/x/trends", params);
+        renderedValue(runContext, this.woeid, Integer.class).ifPresent(value -> params.woeid(value.longValue()));
+        renderedValue(runContext, this.count, Integer.class).ifPresent(value -> params.count(value.longValue()));
+
+        return call(runContext, client -> client.x().withRawResponse().getTrends(params.build()));
     }
 }
