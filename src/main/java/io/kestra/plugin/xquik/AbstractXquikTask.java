@@ -131,9 +131,9 @@ public abstract class AbstractXquikTask extends Task implements RunnableTask<Abs
             runContext.render(this.options.getConnectTimeout()).as(Duration.class).ifPresent(timeout::connect);
             runContext.render(this.options.getReadIdleTimeout()).as(Duration.class).ifPresent(timeout::read);
 
-            Map<String, String> headers = runContext.render(this.options.getHeaders()).asMap(String.class, String.class);
-            if (headers != null) {
-                headers.forEach(builder::putHeader);
+            Map<String, String> rHeaders = runContext.render(this.options.getHeaders()).asMap(String.class, String.class);
+            if (rHeaders != null) {
+                rHeaders.forEach(builder::putHeader);
             }
 
             Charset rCharset = runContext.render(this.options.getDefaultCharset()).as(Charset.class).orElse(StandardCharsets.UTF_8);
