@@ -1,8 +1,10 @@
 package io.kestra.plugin.xquik;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.x_twitter_scraper.api.client.XTwitterScraperClient;
 import com.x_twitter_scraper.api.client.okhttp.XTwitterScraperOkHttpClient;
+import com.x_twitter_scraper.api.core.ObjectMappers;
 import com.x_twitter_scraper.api.core.Timeout;
 import com.x_twitter_scraper.api.core.http.HttpResponseFor;
 import com.x_twitter_scraper.api.errors.XTwitterScraperServiceException;
@@ -100,7 +102,7 @@ public abstract class AbstractXquikTask extends Task implements RunnableTask<Abs
             }
         } catch (XTwitterScraperServiceException e) {
             throw new IllegalStateException(
-                "Xquik request failed with HTTP status code " + e.statusCode() + responseBodySuffix(String.valueOf(e.body())),
+                "Xquik request failed with HTTP status code " + e.statusCode() + responseBodySuffix(errorBody(e)),
                 e
             );
         } finally {
@@ -218,6 +220,15 @@ public abstract class AbstractXquikTask extends Task implements RunnableTask<Abs
         }
 
         return Optional.empty();
+    }
+
+    /** The SDK hands back the error body as a JsonValue; render it as JSON rather than a Java map toString. */
+    private String errorBody(XTwitterScraperServiceException e) {
+        try {
+            return ObjectMappers.jsonMapper().writeValueAsString(e.body());
+        } catch (JsonProcessingException ignored) {
+            return String.valueOf(e.body());
+        }
     }
 
     private String responseBodySuffix(String body) {

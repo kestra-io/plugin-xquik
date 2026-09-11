@@ -167,7 +167,8 @@ class XquikTaskTest extends AbstractXquikTest {
         var exception = assertThrows(IllegalStateException.class, () -> task.run(runContext));
 
         assertThat(exception.getMessage(), containsString("Xquik request failed with HTTP status code 400"));
-        assertThat(exception.getMessage(), containsString("tweet not available"));
+        // The body must stay real JSON, not a Java map toString such as {error=tweet not available}.
+        assertThat(exception.getMessage(), containsString("{\"error\":\"tweet not available\"}"));
     }
 
     @Test
