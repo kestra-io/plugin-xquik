@@ -57,8 +57,8 @@ public class List extends AbstractXquikTask {
     public Output run(RunContext runContext) throws Exception {
         XGetTrendsParams.Builder params = XGetTrendsParams.builder();
 
-        renderedValue(runContext, this.woeid, Integer.class).ifPresent(value -> params.woeid(value.longValue()));
-        renderedValue(runContext, this.count, Integer.class).ifPresent(value -> params.count(value.longValue()));
+        runContext.render(this.woeid).as(Integer.class).ifPresent(value -> params.woeid(value.longValue()));
+        runContext.render(this.count).as(Integer.class).ifPresent(value -> params.count(value.longValue()));
 
         return call(runContext, client -> client.x().withRawResponse().getTrends(params.build()));
     }

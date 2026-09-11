@@ -57,7 +57,7 @@ public class Search extends AbstractXquikTask {
         UserRetrieveSearchParams.Builder params = UserRetrieveSearchParams.builder()
             .q(runContext.render(this.query).as(String.class).orElseThrow());
 
-        renderedValue(runContext, this.cursor, String.class).ifPresent(params::cursor);
+        runContext.render(this.cursor).as(String.class).filter(value -> !value.isBlank()).ifPresent(params::cursor);
 
         return call(runContext, client -> client.x().users().withRawResponse().retrieveSearch(params.build()));
     }

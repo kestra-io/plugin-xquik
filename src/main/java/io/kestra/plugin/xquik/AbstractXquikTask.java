@@ -148,35 +148,6 @@ public abstract class AbstractXquikTask extends Task implements RunnableTask<Abs
         return builder.timeout(timeout.build()).build();
     }
 
-    /** Optional parameters are only sent when set and non-blank, matching the previous query string builder. */
-    protected <T> Optional<T> renderedValue(RunContext runContext, Property<T> property, Class<T> type)
-        throws IllegalVariableEvaluationException {
-        if (property == null) {
-            return Optional.empty();
-        }
-
-        return runContext.render(property).as(type)
-            .filter(value -> !(value instanceof String string) || !string.isBlank());
-    }
-
-    /**
-     * Before the SDK migration the named properties and `additionalQueryParameters` shared one map, so a
-     * user-supplied key replaced the property. The SDK appends instead, which would put the parameter on
-     * the wire twice, so the property is skipped when the user supplied the same key.
-     */
-    protected <T> Optional<T> renderedValue(
-        RunContext runContext,
-        Property<T> property,
-        Class<T> type,
-        Map<String, Object> additionalQueryParameters,
-        String key) throws IllegalVariableEvaluationException {
-        if (additionalQueryParameters.containsKey(key)) {
-            return Optional.empty();
-        }
-
-        return renderedValue(runContext, property, type);
-    }
-
     protected Optional<Map<String, Object>> renderedMap(RunContext runContext, Property<Map<String, Object>> value)
         throws IllegalVariableEvaluationException {
         return Optional.ofNullable(runContext.render(value).asMap(String.class, Object.class));

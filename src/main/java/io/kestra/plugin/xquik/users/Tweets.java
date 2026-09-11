@@ -72,20 +72,25 @@ public class Tweets extends AbstractXquikTask {
 
     @Override
     public Output run(RunContext runContext) throws Exception {
+        Map<String, Object> additional = additionalQueryParameters(runContext, this.additionalQueryParameters);
+
         UserRetrieveTweetsParams.Builder params = UserRetrieveTweetsParams.builder()
             .id(runContext.render(this.user).as(String.class).orElseThrow().replaceFirst("^@", ""));
 
-        Map<String, Object> additional = additionalQueryParameters(runContext, this.additionalQueryParameters);
-
-        renderedValue(runContext, this.cursor, String.class, additional, "cursor").ifPresent(params::cursor);
-        renderedValue(runContext, this.includeReplies, Boolean.class, additional, "includeReplies")
-            .ifPresent(params::includeReplies);
-        renderedValue(runContext, this.includeParentTweet, Boolean.class, additional, "includeParentTweet")
-            .ifPresent(params::includeParentTweet);
-
-        for (Map.Entry<String, Object> entry : additional.entrySet()) {
-            params.putAdditionalQueryParam(entry.getKey(), String.valueOf(entry.getValue()));
+        // A key given in additionalQueryParameters replaced the property before the SDK migration.
+        if (!additional.containsKey("cursor")) {
+            runContext.render(this.cursor).as(String.class).filter(value -> !value.isBlank()).ifPresent(params::cursor);
         }
+
+        if (!additional.containsKey("includeReplies")) {
+            runContext.render(this.includeReplies).as(Boolean.class).ifPresent(params::includeReplies);
+        }
+
+        if (!additional.containsKey("includeParentTweet")) {
+            runContext.render(this.includeParentTweet).as(Boolean.class).ifPresent(params::includeParentTweet);
+        }
+
+        additional.forEach((key, value) -> params.putAdditionalQueryParam(key, String.valueOf(value)));
 
         return call(runContext, client -> client.x().users().withRawResponse().retrieveTweets(params.build()));
     }
