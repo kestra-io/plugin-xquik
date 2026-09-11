@@ -17,6 +17,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
+import static org.hamcrest.Matchers.not;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
@@ -152,6 +153,101 @@ class XquikTaskTest extends AbstractXquikTest {
         assertThat(FakeXquikController.lastPath(), is("/x/tweets/search"));
         assertThat(FakeXquikController.queryParameters().get("language"), is("en"));
         assertThat(FakeXquikController.queryParameters().get("minFaves"), is("10"));
+    }
+
+    @Test
+    void additionalQueryParametersOverrideNamedPropertiesWithoutDuplicating() throws Exception {
+        var runContext = runContextFactory.of();
+
+        var task = io.kestra.plugin.xquik.tweets.Search.builder()
+            .baseUrl(Property.ofValue(embeddedServer.getURI() + "/api/v1"))
+            .apiKey(Property.ofValue("test-api-key"))
+            .query(Property.ofValue("kestra"))
+            .limit(Property.ofValue(20))
+            .additionalQueryParameters(Property.ofValue(Map.of("limit", 5)))
+            .build();
+
+        task.run(runContext);
+
+        // Pre-migration the user value replaced the property; it must not be sent alongside it.
+        assertThat(FakeXquikController.queryParameters().get("limit"), is("5"));
+        assertThat(FakeXquikController.lastQuery().split("limit=", -1).length - 1, is(1));
+    }
+
+    @Test
+    void optionsApplyTimeoutsAndCustomHeaders() throws Exception {
+        var runContext = runContextFactory.of();
+
+        var task = io.kestra.plugin.xquik.users.Get.builder()
+            .baseUrl(Property.ofValue(embeddedServer.getURI() + "/api/v1"))
+            .apiKey(Property.ofValue("test-api-key"))
+            .user(Property.ofValue("kestra_io"))
+            .options(AbstractXquikTask.RequestOptions.builder()
+                .connectTimeout(Property.ofValue(java.time.Duration.ofSeconds(5)))
+                .readIdleTimeout(Property.ofValue(java.time.Duration.ofSeconds(30)))
+                .headers(Property.ofValue(Map.of("X-Flow-Id", "smoke")))
+                .build())
+            .build();
+
+        var output = task.run(runContext);
+
+        assertThat(FakeXquikController.headers().get("x-flow-id"), is("smoke"));
+        assertThat(FakeXquikController.headers().get("x-api-key"), is("test-api-key"));
+        assertThat(output.getBody(), notNullValue());
+    }
+
+    @Test
+    void emptyOptionsBlockStillBuildsAWorkingClient() throws Exception {
+        var runContext = runContextFactory.of();
+
+        // Exercises the partially-populated SDK Timeout: no connectTimeout set, readIdleTimeout defaulted.
+        var task = io.kestra.plugin.xquik.users.Get.builder()
+            .baseUrl(Property.ofValue(embeddedServer.getURI() + "/api/v1"))
+            .apiKey(Property.ofValue("test-api-key"))
+            .user(Property.ofValue("kestra_io"))
+            .options(AbstractXquikTask.RequestOptions.builder().build())
+            .build();
+
+        var output = task.run(runContext);
+
+        assertThat(output.getBody(), notNullValue());
+        assertThat(output.getSize(), is(1));
+    }
+
+    @Test
+    void requestSendsAcceptJsonHeader() throws Exception {
+        var runContext = runContextFactory.of();
+
+        var task = io.kestra.plugin.xquik.users.Get.builder()
+            .baseUrl(Property.ofValue(embeddedServer.getURI() + "/api/v1"))
+            .apiKey(Property.ofValue("test-api-key"))
+            .user(Property.ofValue("kestra_io"))
+            .build();
+
+        task.run(runContext);
+
+        assertThat(FakeXquikController.headers().get("accept"), containsString("application/json"));
+    }
+
+    @Test
+    void blankAdditionalQueryParametersAreNotSent() throws Exception {
+        var runContext = runContextFactory.of();
+
+        var extra = new java.util.HashMap<String, Object>();
+        extra.put("language", "");
+        extra.put("mediaType", "video");
+
+        var task = io.kestra.plugin.xquik.tweets.Search.builder()
+            .baseUrl(Property.ofValue(embeddedServer.getURI() + "/api/v1"))
+            .apiKey(Property.ofValue("test-api-key"))
+            .query(Property.ofValue("kestra"))
+            .additionalQueryParameters(Property.ofValue(extra))
+            .build();
+
+        task.run(runContext);
+
+        assertThat(FakeXquikController.queryParameters().get("mediaType"), is("video"));
+        assertThat(FakeXquikController.lastQuery(), not(containsString("language=")));
     }
 
     @Test

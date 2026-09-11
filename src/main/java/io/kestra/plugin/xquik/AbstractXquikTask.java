@@ -35,6 +35,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.temporal.ChronoUnit;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -113,32 +114,38 @@ public abstract class AbstractXquikTask extends Task implements RunnableTask<Abs
     private XTwitterScraperClient client(RunContext runContext) throws IllegalVariableEvaluationException {
         XTwitterScraperOkHttpClient.Builder builder = XTwitterScraperOkHttpClient.builder()
             .apiKey(runContext.render(this.apiKey).as(String.class).orElseThrow())
-            .baseUrl(runContext.render(this.baseUrl).as(String.class).orElse(DEFAULT_BASE_URL));
+            .baseUrl(runContext.render(this.baseUrl).as(String.class).orElse(DEFAULT_BASE_URL))
+            // The previous client sent this and did not retry; keep both so the request is unchanged.
+            .putHeader("Accept", "application/json")
+            .maxRetries(0);
+
+        // Kestra's HTTP client applies no connect, read or overall call timeout unless asked, so start
+        // from uncapped. The SDK would otherwise default to one minute each, including a 60s call cap.
+        Timeout.Builder timeout = Timeout.builder()
+            .connect(Duration.ZERO)
+            .read(Duration.ZERO)
+            .write(Duration.ZERO)
+            .request(Duration.ZERO);
 
         if (this.options != null) {
-            Timeout.Builder timeout = Timeout.builder()
-                // Kestra's client caps idle reads but never the overall call, so leave the call uncapped.
-                .request(Duration.ZERO);
-
             runContext.render(this.options.getConnectTimeout()).as(Duration.class).ifPresent(timeout::connect);
             runContext.render(this.options.getReadIdleTimeout()).as(Duration.class).ifPresent(timeout::read);
-            builder.timeout(timeout.build());
 
             Map<String, String> headers = runContext.render(this.options.getHeaders()).asMap(String.class, String.class);
             if (headers != null) {
                 headers.forEach(builder::putHeader);
             }
 
-            Charset charset = runContext.render(this.options.getDefaultCharset()).as(Charset.class).orElse(StandardCharsets.UTF_8);
-            if (!StandardCharsets.UTF_8.equals(charset)) {
+            Charset rCharset = runContext.render(this.options.getDefaultCharset()).as(Charset.class).orElse(StandardCharsets.UTF_8);
+            if (!StandardCharsets.UTF_8.equals(rCharset)) {
                 runContext.logger().warn(
                     "defaultCharset is set to {} but Xquik responses are always decoded as UTF-8; the value is ignored.",
-                    charset
+                    rCharset
                 );
             }
         }
 
-        return builder.build();
+        return builder.timeout(timeout.build()).build();
     }
 
     /** Optional parameters are only sent when set and non-blank, matching the previous query string builder. */
@@ -152,9 +159,41 @@ public abstract class AbstractXquikTask extends Task implements RunnableTask<Abs
             .filter(value -> !(value instanceof String string) || !string.isBlank());
     }
 
+    /**
+     * Before the SDK migration the named properties and `additionalQueryParameters` shared one map, so a
+     * user-supplied key replaced the property. The SDK appends instead, which would put the parameter on
+     * the wire twice, so the property is skipped when the user supplied the same key.
+     */
+    protected <T> Optional<T> renderedValue(
+        RunContext runContext,
+        Property<T> property,
+        Class<T> type,
+        Map<String, Object> additionalQueryParameters,
+        String key) throws IllegalVariableEvaluationException {
+        if (additionalQueryParameters.containsKey(key)) {
+            return Optional.empty();
+        }
+
+        return renderedValue(runContext, property, type);
+    }
+
     protected Optional<Map<String, Object>> renderedMap(RunContext runContext, Property<Map<String, Object>> value)
         throws IllegalVariableEvaluationException {
         return Optional.ofNullable(runContext.render(value).asMap(String.class, Object.class));
+    }
+
+    /** These went through the same null/blank filter as the named properties before the SDK migration. */
+    protected Map<String, Object> additionalQueryParameters(RunContext runContext, Property<Map<String, Object>> value)
+        throws IllegalVariableEvaluationException {
+        Map<String, Object> filtered = new LinkedHashMap<>();
+
+        renderedMap(runContext, value).orElse(Map.of()).forEach((key, entry) -> {
+            if (entry != null && !String.valueOf(entry).isBlank()) {
+                filtered.put(key, entry);
+            }
+        });
+
+        return filtered;
     }
 
     private Output handleFetch(RunContext runContext, Map<String, Object> body, FetchType renderedFetchType) throws Exception {
@@ -225,9 +264,11 @@ public abstract class AbstractXquikTask extends Task implements RunnableTask<Abs
     /** The SDK hands back the error body as a JsonValue; render it as JSON rather than a Java map toString. */
     private String errorBody(XTwitterScraperServiceException e) {
         try {
-            return ObjectMappers.jsonMapper().writeValueAsString(e.body());
+            String body = ObjectMappers.jsonMapper().writeValueAsString(e.body());
+            // The SDK swaps an unparseable body (an HTML gateway error, say) for a missing value.
+            return "null".equals(body) ? "" : body;
         } catch (JsonProcessingException ignored) {
-            return String.valueOf(e.body());
+            return "";
         }
     }
 

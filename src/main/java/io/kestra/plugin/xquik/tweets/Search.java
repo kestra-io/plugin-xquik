@@ -101,18 +101,25 @@ public class Search extends AbstractXquikTask {
 
     @Override
     public Output run(RunContext runContext) throws Exception {
+        Map<String, Object> additional = additionalQueryParameters(runContext, this.additionalQueryParameters);
+
         TweetSearchParams.Builder params = TweetSearchParams.builder()
-            .q(runContext.render(this.query).as(String.class).orElseThrow());
+            .q(additional.containsKey("q")
+                ? String.valueOf(additional.get("q"))
+                : runContext.render(this.query).as(String.class).orElseThrow());
 
-        renderedValue(runContext, this.queryType, QueryType.class)
+        renderedValue(runContext, this.queryType, QueryType.class, additional, "queryType")
             .ifPresent(value -> params.queryType(TweetSearchParams.QueryType.of(value.name())));
-        renderedValue(runContext, this.limit, Integer.class).ifPresent(value -> params.limit(value.longValue()));
-        renderedValue(runContext, this.cursor, String.class).ifPresent(params::cursor);
-        renderedValue(runContext, this.sinceTime, String.class).ifPresent(params::sinceTime);
-        renderedValue(runContext, this.untilTime, String.class).ifPresent(params::untilTime);
+        renderedValue(runContext, this.limit, Integer.class, additional, "limit")
+            .ifPresent(value -> params.limit(value.longValue()));
+        renderedValue(runContext, this.cursor, String.class, additional, "cursor").ifPresent(params::cursor);
+        renderedValue(runContext, this.sinceTime, String.class, additional, "sinceTime").ifPresent(params::sinceTime);
+        renderedValue(runContext, this.untilTime, String.class, additional, "untilTime").ifPresent(params::untilTime);
 
-        for (Map.Entry<String, Object> entry : renderedMap(runContext, this.additionalQueryParameters).orElse(Map.of()).entrySet()) {
-            params.putAdditionalQueryParam(entry.getKey(), String.valueOf(entry.getValue()));
+        for (Map.Entry<String, Object> entry : additional.entrySet()) {
+            if (!"q".equals(entry.getKey())) {
+                params.putAdditionalQueryParam(entry.getKey(), String.valueOf(entry.getValue()));
+            }
         }
 
         return call(runContext, client -> client.x().tweets().withRawResponse().search(params.build()));

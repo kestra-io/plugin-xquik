@@ -18,6 +18,7 @@ public class FakeXquikController {
     private static final Map<String, String> headers = new ConcurrentHashMap<>();
     private static final Map<String, String> queryParameters = new ConcurrentHashMap<>();
     private static final AtomicReference<String> lastPath = new AtomicReference<>();
+    private static final AtomicReference<String> lastQuery = new AtomicReference<>();
 
     public static Map<String, String> headers() {
         return headers;
@@ -31,10 +32,16 @@ public class FakeXquikController {
         return lastPath.get();
     }
 
+    /** Raw query string, so tests can catch a parameter being sent twice. */
+    public static String lastQuery() {
+        return lastQuery.get();
+    }
+
     public static void reset() {
         headers.clear();
         queryParameters.clear();
         lastPath.set(null);
+        lastQuery.set(null);
     }
 
     @Get("/tweets/search")
@@ -134,6 +141,7 @@ public class FakeXquikController {
 
     private void capture(HttpRequest<?> request, String path) {
         lastPath.set(path);
+        lastQuery.set(request.getUri().getQuery());
         headers.clear();
         request.getHeaders().forEach((name, values) -> headers.put(name.toLowerCase(), String.join(",", values)));
 

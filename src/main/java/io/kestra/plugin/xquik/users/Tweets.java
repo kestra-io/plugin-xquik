@@ -75,11 +75,15 @@ public class Tweets extends AbstractXquikTask {
         UserRetrieveTweetsParams.Builder params = UserRetrieveTweetsParams.builder()
             .id(runContext.render(this.user).as(String.class).orElseThrow().replaceFirst("^@", ""));
 
-        renderedValue(runContext, this.cursor, String.class).ifPresent(params::cursor);
-        renderedValue(runContext, this.includeReplies, Boolean.class).ifPresent(params::includeReplies);
-        renderedValue(runContext, this.includeParentTweet, Boolean.class).ifPresent(params::includeParentTweet);
+        Map<String, Object> additional = additionalQueryParameters(runContext, this.additionalQueryParameters);
 
-        for (Map.Entry<String, Object> entry : renderedMap(runContext, this.additionalQueryParameters).orElse(Map.of()).entrySet()) {
+        renderedValue(runContext, this.cursor, String.class, additional, "cursor").ifPresent(params::cursor);
+        renderedValue(runContext, this.includeReplies, Boolean.class, additional, "includeReplies")
+            .ifPresent(params::includeReplies);
+        renderedValue(runContext, this.includeParentTweet, Boolean.class, additional, "includeParentTweet")
+            .ifPresent(params::includeParentTweet);
+
+        for (Map.Entry<String, Object> entry : additional.entrySet()) {
             params.putAdditionalQueryParam(entry.getKey(), String.valueOf(entry.getValue()));
         }
 
